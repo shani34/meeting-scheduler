@@ -3,13 +3,27 @@ package main
 import (
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/gin-gonic/gin"
 	"github.com/shani34/meeting-scheduler/api/handlers"
 	"github.com/shani34/meeting-scheduler/api/services"
+	"github.com/shani34/meeting-scheduler/internal/config"
+	"github.com/shani34/meeting-scheduler/internal/database"
 )
 
 func main() {
+	// Initialize configuration
+	cfg := config.NewConfig()
+
+	// Initialize database
+	db, err := database.NewDB(cfg)
+	if err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+	defer db.Close()
+
 	// Initialize services
 	schedulerService := services.NewSchedulerService()
 	eventHandler := handlers.NewEventHandler(schedulerService)
@@ -49,9 +63,18 @@ func main() {
 		port = "8080"
 	}
 
-	// Start server
-	log.Printf("Server starting on port %s", port)
-	if err := router.Run(":" + port); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
-	}
+	// Start server in a goroutine
+	go func() {
+		log.Printf("Server starting on port %s", port)
+		if err := router.Run(":" + port); err != nil {
+			log.Fatalf("Failed to start server: %v", err)
+		}
+	}()
+
+	// Wait for interrupt signal
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Println("Shutting down server...")
 } 
