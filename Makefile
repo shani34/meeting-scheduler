@@ -1,51 +1,34 @@
-.PHONY: build test run docker-build docker-run deploy
+.PHONY: build run test migrate clean
 
 # Build the application
 build:
 	go build -o bin/server cmd/server/main.go
 
+# Run the application
+run:
+	go run cmd/server/main.go
+
 # Run tests
 test:
 	go test -v ./...
 
-# Run the application locally
-run:
-	go run cmd/server/main.go
+# Run database migrations
+migrate:
+	psql -U postgres -d meeting_scheduler -f migrations/001_initial_schema.sql
 
-# Build Docker image
-docker-build:
-	docker build -t meeting-scheduler .
-
-# Run Docker container
-docker-run:
-	docker run -p 8080:8080 meeting-scheduler
-
-# Deploy to AWS ECS
-deploy:
-	cd deployments/terraform && \
-	terraform init && \
-	terraform apply -var-file=terraform.tfvars
-
-# Clean up build artifacts
+# Clean build artifacts
 clean:
 	rm -rf bin/
 	go clean
 
 # Install dependencies
 deps:
-	go mod download
+	go mod tidy
 
-# Format code
-fmt:
-	go fmt ./...
-
-# Lint code
+# Run linter
 lint:
 	golangci-lint run
 
-# Generate OpenAPI documentation
+# Generate API documentation
 docs:
-	swag init -g cmd/server/main.go
-
-# Run all checks
-check: fmt lint test 
+	swag init -g cmd/server/main.go 

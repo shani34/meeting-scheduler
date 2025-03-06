@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -8,85 +9,159 @@ import (
 	"github.com/google/uuid"
 	"github.com/shani34/meeting-scheduler/api/models"
 	"github.com/shani34/meeting-scheduler/api/services"
+	"github.com/shani34/meeting-scheduler/internal/repository"
 )
 
-// EventHandler handles HTTP requests related to events
+// EventHandler handles HTTP requests for event-related operations
 type EventHandler struct {
-	schedulerService *services.SchedulerService
-	// Add other dependencies (e.g., database client)
+	eventRepo      *repository.EventRepository
+	availabilityRepo *repository.AvailabilityRepository
+	scheduler      *services.SchedulerService
 }
 
 // NewEventHandler creates a new instance of EventHandler
-func NewEventHandler(schedulerService *services.SchedulerService) *EventHandler {
+func NewEventHandler(eventRepo *repository.EventRepository, availabilityRepo *repository.AvailabilityRepository, scheduler *services.SchedulerService) *EventHandler {
 	return &EventHandler{
-		schedulerService: schedulerService,
+		eventRepo:      eventRepo,
+		availabilityRepo: availabilityRepo,
+		scheduler:      scheduler,
 	}
 }
 
 // CreateEvent handles the creation of a new event
 func (h *EventHandler) CreateEvent(c *gin.Context) {
-	var req models.CreateEventRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	var event models.Event
+	if err := c.ShouldBindJSON(&event); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	event := &models.Event{
-		ID:        uuid.New().String(),
-		Title:     req.Title,
-		Duration:  req.Duration,
-		TimeSlots: req.TimeSlots,
-		CreatedBy: c.GetString("user_id"), // Assuming user_id is set by auth middleware
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+	// Set event ID and timestamps
+	event.ID = uuid.New().String()
+	event.CreatedAt = time.Now()
+	event.UpdatedAt = time.Now()
+
+	// Create event in database
+	if err := h.eventRepo.CreateEvent(&event); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create event"})
+		return
 	}
 
-	// TODO: Save event to database
 	c.JSON(http.StatusCreated, event)
 }
 
-// GetEvent retrieves an event by ID
+// GetEvent handles retrieving an event by ID
 func (h *EventHandler) GetEvent(c *gin.Context) {
-	eventID := c.Param("id")
-	// TODO: Fetch event from database
-	c.JSON(http.StatusOK, gin.H{"message": "Event retrieved", "id": eventID})
-}
-
-// UpdateEvent updates an existing event
-func (h *EventHandler) UpdateEvent(c *gin.Context) {
-	eventID := c.Param("id")
-	var req models.UpdateEventRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	eventID := c.Query("id")
+	if eventID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Event ID is required"})
 		return
 	}
 
-	// TODO: Update event in database
-	c.JSON(http.StatusOK, gin.H{"message": "Event updated", "id": eventID})
+	event, err := h.eventRepo.GetEvent(eventID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Event not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, event)
 }
 
-// DeleteEvent deletes an event
+// UpdateEvent handles updating an existing event
+func (h *EventHandler) UpdateEvent(c *gin.Context) {
+	eventID := c.Query("id")
+	if eventID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Event ID is required"})
+		return
+	}
+
+	var event models.Event
+	if err := c.ShouldBindJSON(&event); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	// Ensure event ID matches
+	event.ID = eventID
+	event.UpdatedAt = time.Now()
+
+	if err := h.eventRepo.UpdateEvent(&event); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update event"})
+		return
+	}
+
+	c.JSON(http.StatusOK, event)
+}
+
+// DeleteEvent handles deleting an event
 func (h *EventHandler) DeleteEvent(c *gin.Context) {
-	eventID := c.Param("id")
-	// TODO: Delete event from database
-	c.JSON(http.StatusOK, gin.H{"message": "Event deleted", "id": eventID})
+	eventID := c.Query("id")
+	if eventID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Event ID is required"})
+		return
+	}
+
+	if err := h.eventRepo.DeleteEvent(eventID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete event"})
+		return
+	}
+
+	c.Status(http.StatusNoContent)
 }
 
-// GetRecommendedTimeSlots retrieves recommended time slots for an event
-func (h *EventHandler) GetRecommendedTimeSlots(c *gin.Context) {
-	eventID := c.Param("id")
-	
-	// TODO: Fetch event and participant availabilities from database
-	event := &models.Event{
-		ID: eventID,
-		// Add other fields
-	}
-	
-	participantAvailabilities := []models.ParticipantAvailability{
-		// Add participant availabilities
+// SubmitAvailability handles submitting participant availability
+func (h *EventHandler) SubmitAvailability(c *gin.Context) {
+	eventID := c.Query("event_id")
+	if eventID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Event ID is required"})
+		return
 	}
 
-	recommendations := h.schedulerService.FindOptimalTimeSlots(event, participantAvailabilities)
+	var availability models.ParticipantAvailability
+	if err := c.ShouldBindJSON(&availability); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	// Set availability ID and timestamps
+	availability.ID = uuid.New().String()
+	availability.EventID = eventID
+	availability.CreatedAt = time.Now()
+	availability.UpdatedAt = time.Now()
+
+	if err := h.availabilityRepo.CreateAvailability(&availability); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to submit availability"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, availability)
+}
+
+// GetOptimalTimeSlots handles finding optimal time slots for an event
+func (h *EventHandler) GetOptimalTimeSlots(c *gin.Context) {
+	eventID := c.Query("event_id")
+	if eventID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Event ID is required"})
+		return
+	}
+
+	// Get event details
+	event, err := h.eventRepo.GetEvent(eventID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Event not found"})
+		return
+	}
+
+	// Get all participant availabilities
+	availabilities, err := h.eventRepo.GetParticipantAvailabilities(eventID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get participant availabilities"})
+		return
+	}
+
+	// Find optimal time slots
+	recommendations := h.scheduler.FindOptimalTimeSlots(event, availabilities)
+
 	c.JSON(http.StatusOK, recommendations)
 }
 
