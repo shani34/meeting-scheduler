@@ -42,7 +42,7 @@ meeting-scheduler/
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/shanikumar/meeting-scheduler.git
+git clone https://github.com/shani34/meeting-scheduler.git
 cd meeting-scheduler
 ```
 

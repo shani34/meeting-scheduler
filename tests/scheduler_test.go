@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shanikumar/meeting-scheduler/api/models"
-	"github.com/shanikumar/meeting-scheduler/api/services"
 	"github.com/stretchr/testify/assert"
+	"github.com/shani34/meeting-scheduler/api/models"
+	"github.com/shani34/meeting-scheduler/api/services"
 )
 
 func TestFindOptimalTimeSlots(t *testing.T) {

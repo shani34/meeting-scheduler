@@ -1,4 +1,4 @@
-module github.com/shanikumar/meeting-scheduler
+module github.com/shani34/meeting-scheduler
 
 go 1.21
 

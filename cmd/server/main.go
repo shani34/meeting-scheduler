@@ -5,8 +5,8 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
-	"github.com/shanikumar/meeting-scheduler/api/handlers"
-	"github.com/shanikumar/meeting-scheduler/api/services"
+	"github.com/shani34/meeting-scheduler/api/handlers"
+	"github.com/shani34/meeting-scheduler/api/services"
 )
 
 func main() {
